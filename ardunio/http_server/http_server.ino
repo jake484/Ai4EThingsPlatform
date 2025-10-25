@@ -23,7 +23,7 @@ U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, 14, 2, U8X8_PIN_NONE);
 
 // 参数定义
 const char* ssid = "Ai4E-EG8200";  // WiFi 名称
-const char* password = "EG12345678";      // WiFi 密码
+const char* password = "ai4energy";      // WiFi 密码
 // 添加设备开关状态变量
 bool deviceOn = true;
 // Web服务器实例 (默认端口80)
