@@ -49,17 +49,17 @@
 
 ### Thingsboard
 
-地址端口为8080
+**访问Thingsboard地址端口为8080（或者Browservice的80端口）**
 
 用Docker安装了[Thingsboard社区版](https://thingsboard.io/)。并实现了数据展示与设备控制。
 
 数据展示的逻辑见[Thingsboard教程](https://thingsboard.io/docs/getting-started-guides/helloworld/)。
 
-设备控制的逻辑稍微不同：网关不断向Thingsboard轮询RPC（Remote Procedure Call）请求，当设备控制的按钮有动作时，网关会收到结果。否则，网关的请求会一直等待。具体见网关的设置。
+设备控制的逻辑稍微不同：**网关不断向Thingsboard轮询RPC（Remote Procedure Call）请求，当设备控制的按钮有动作时，网关会收到结果。否则，网关的请求会一直等待。具体见网关的设置**。
 
 ### Browservice
 
-Browservice是一个浏览器服务，主要的目的是提供一个简易版的服务，使得开发板的浏览器可以访问。由于开发板性能有限，直接访问Thingsboard无法加载全部的网页，因此需要使用Browservice将Thingsboard的网页渲染成图片的代理服务。
+Browservice是一个浏览器服务，主要的目的是提供一个简易版的服务，使得开发板的浏览器可以访问。由于开发板性能有限，直接访问Thingsboard无法加载全部的网页，因此需要使用Browservice提供代理服务将Thingsboard的网页渲染成图片。
 
 Browservice将8080的Thingsboard服务映射到了80端口。
 
