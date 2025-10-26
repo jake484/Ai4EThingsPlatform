@@ -2,7 +2,7 @@
 
 ## 0 整体介绍
 
-### 物联网架构
+### 物联网架构 v1.0.0
 
 ![图 3](assets/figs/README-20-30-07.png)  
 
@@ -51,7 +51,7 @@
 
 **访问Thingsboard地址端口为8080（或者Browservice的80端口）**
 
-用Docker安装了[Thingsboard社区版](https://thingsboard.io/)。并实现了数据展示与设备控制。
+用Docker安装了[Thingsboard社区版](https://thingsboard.io/)。并实现了数据展示与设备控制。数据展示在仪表盘界面。
 
 数据展示的逻辑见[Thingsboard教程](https://thingsboard.io/docs/getting-started-guides/helloworld/)。
 
@@ -92,7 +92,7 @@ sudo firewall-cmd --reload
 
 网关手册见[附件](assets\docs\网关-EG&EV系列_快速上手说明.pdf)
 
-网关的已完成配置，作为中间层，不断读取传感器数据，将数据上传至工控机。并不断轮询访问工控机，进行设备控制信息。
+网关的配置已完成，作为中间层，**网关不断读取传感器数据，并将数据推送至工控机ThingsBoard服务**，并不断**轮询访问工控机，获取ThingsBoard是否有对设备的控制指令**。
 
 ![图 5](assets/figs/README-19-55-19.png)  
 
@@ -103,9 +103,10 @@ sudo firewall-cmd --reload
 
 终端设备采用`ESP8266`作为核心模块，搭载显示屏与温湿度传感器，代码见[附件](ardunio\http_server.ino)。需要下载[Arduino IDE](https://www.arduino.cc/en/software)，Arduino IDE环境配置方法参考[文档]([ardunio\Arduino_IDE_环境配置.pdf](https://wiki.diustou.com/cn/ESP8266_Dev_Board))，核心内容如下图：
 
-![图 6](assets/figs/README-20-01-00.png)  
+![图 6](assets/figs/README-20-01-00.png) 
 
-Arduino IDE打开代码烧录到8266板子即可。
+Arduino IDE打开代码烧录到8266板子即可。IDE界面如下：
+![图 9](assets/figs/README-09-09-24.png) 
 
 这个Arduino代码实现了一个基于ESP8266的温湿度监测和设备控制系统，其连接网关的WiFi，在网关的局域网内，而不在路由器的局域网内，从板子的显示面板可以看到它的IP地址，是192.168.88.xxx，和路由器局域网不是一个网段。**可以理解为网关将终端设备和路由器局域网做了一层隔离**。
 
