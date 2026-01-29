@@ -121,7 +121,7 @@ sudo cat /etc/NetworkManager/system-connections/Wired\ connection\ 1.nmconnectio
 
 ## 3 PLC
 
-PLC采用艾莫迅的200系列200系列PLC，型号214-3AD23-0XB8为，其它型号与型号间的区别可查阅[选型手册](物理系统\plc\选型手册.pdf)，也可以在[官方文档](https://wiki.amsamotion.com/?title=196&doc=207)中查看。编程软件采用V4.0 STEP 7 MicroWIN SP9，[下载链接](https://www.ad.siemens.com.cn/download/materialaggregation_2190.html)及相关问题也可以在[文档](https://wiki.amsamotion.com/?title=5&doc=8)中查看。
+PLC采用艾莫迅的200系列200系列PLC，型号为214-3AD23-0XB8，其它型号与型号间的区别可查阅[选型手册](物理系统\plc\选型手册.pdf)，也可以在[官方文档](https://wiki.amsamotion.com/?title=196&doc=207)中查看。编程软件采用V4.0 STEP 7 MicroWIN SP9，[下载链接](https://www.ad.siemens.com.cn/download/materialaggregation_2190.html)及相关问题也可以在[文档](https://wiki.amsamotion.com/?title=5&doc=8)中查看。
 
 
 PLC中主要功能为：

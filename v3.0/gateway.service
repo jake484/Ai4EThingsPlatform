@@ -1,0 +1,25 @@
+[Unit]
+Description=MQTT Modbus Gateway Service  # 服务描述，自定义即可
+After=network.target  # 网络启动后再启动该服务（脚本用MQTT/网络，必须加）
+Wants=network.target  # 依赖网络服务
+
+[Service]
+# 关键1：虚拟环境python绝对路径
+ExecStart=/home/ai4energy/gateway/ai4energy/bin/python /home/ai4energy/gateway/Gateway.py
+# 关键2：gateway.py所在的工作目录
+WorkingDirectory=/home/ai4energy/gateway
+# 运行用户（替换为你的Ubuntu用户名，比如你的是ai4energy）
+User=ai4energy
+Group=ai4energy
+# 进程类型：后台运行
+Type=simple
+# 异常重启策略（崩溃/退出后自动重启，开发/生产都推荐）
+Restart=on-failure
+RestartSec=5  # 异常后5秒重启
+# 输出重定向（日志会存到syslog，方便查看）
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=gateway-service  # 日志标识，自定义
+
+[Install]
+WantedBy=multi-user.target  # 多用户模式开机自启（桌面/服务器版都适用）
