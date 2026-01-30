@@ -85,9 +85,9 @@ def modbus_rtu_read_float_data():
             print("Modbus RTU 串口连接失败！检查串口号/接线/PLC是否RUN")
             return {}
 
-        # 计算需要读取的寄存器数量：从地址22到86，总共65个地址，每个浮点数占2个寄存器
+        # 计算需要读取的寄存器数量：从地址22到56，总共34个地址，每个浮点数占2个寄存器
         start_offset = 22
-        end_offset = 86
+        end_offset = 56
         total_addresses = end_offset - start_offset + 1  # 65个地址
         total_reg = total_addresses * 2  # 每个浮点数占2个寄存器
 
@@ -116,8 +116,8 @@ def modbus_rtu_read_float_data():
                 # 核心解析：西门子字节序（高字在前）+ IEEE754单精度浮点数
                 int32 = (regs[i] << 16) | regs[i+1]  # 拼接32位整数
                 real_value = unpack('!f', pack('!I', int32))[0]  # 解包浮点
-                data[current_addr] = round(real_value, 2)  # 保留两位小数
-                print(f"RTU读取：偏移{current_addr} → 浮点值：{real_value:.4f}")
+                data[current_addr-start_offset+1] = round(real_value, 2)  # 保留两位小数
+                # print(f"RTU读取：偏移{current_addr} → 浮点值：{real_value:.4f}")
 
         client.close()
         return data
