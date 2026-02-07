@@ -12,7 +12,7 @@ MODBUS_TCP_IP = "192.168.3.13"  # Modbus TCP设备IP
 MODBUS_TCP_PORT = 502  # Modbus TCP设备端口
 
 # Modbus RTU 设备配置
-MODBUS_RTU_PORT = 'COM3'      # 你的USB转485串口号
+MODBUS_RTU_PORT = '/dev/ttyUSB0'      # Windows为串口设备名 例如COM3，Linux为设备路径
 MODBUS_RTU_BAUDRATE = 9600    # 波特率
 MODBUS_RTU_PARITY = 'N'       # 校验位
 MODBUS_RTU_STOPBITS = 1       # 停止位
@@ -27,7 +27,7 @@ MQTT_TOPIC_STATUS = "ai4energy/tcpData"  # TCP数据上传话题
 MQTT_TOPIC_RTU_STATUS = "ai4energy/rtuData"  # RTU数据上传话题
 
 # 采集间隔（秒）
-COLLECT_INTERVAL = 5
+COLLECT_INTERVAL = 3
 
 
 # -------------------------- Modbus TCP 操作函数 --------------------------
@@ -203,6 +203,39 @@ def collect_and_upload_rtu_status(mqtt_client):
 
 
 if __name__ == "__main__":
+    # 初始化 MQTT 客户端，失败时重试
+    mqtt_client = None
+    while not mqtt_client:
+        mqtt_client = mqtt_client_init()
+        if not mqtt_client:
+            print(f"MQTT 客户端初始化失败，30秒后重试...")
+            time.sleep(30)
+    
+    # 启动 MQTT 网络循环（后台线程）
+    mqtt_client.loop_start()
+
+    # 启动 TCP 数据采集上传线程
+    tcp_collect_thread = threading.Thread(
+        target=collect_and_upload_tcp_status, args=(mqtt_client,)
+    )
+    tcp_collect_thread.daemon = True
+    tcp_collect_thread.start()
+
+    # 启动 RTU 数据采集上传线程
+    rtu_collect_thread = threading.Thread(
+        target=collect_and_upload_rtu_status, args=(mqtt_client,)
+    )
+    rtu_collect_thread.daemon = True
+    rtu_collect_thread.start()
+
+    # 主线程保持运行
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("网关服务停止")
+        mqtt_client.loop_stop()
+        mqtt_client.disconnect()
     # 初始化 MQTT 客户端
     mqtt_client = mqtt_client_init()
     if not mqtt_client:

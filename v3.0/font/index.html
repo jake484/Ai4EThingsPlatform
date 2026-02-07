@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ai4Energy智能风电监控大屏</title>
+    <script src="assets/tailwindcss.min.js"></script>
+    <link href="assets/font-awesome-4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script src="assets/chart.umd.min.js"></script>
+    <script src="assets/mqtt.min.js"></script>
+
+    <!-- Tailwind配置 -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#0ea5e9',
+                        secondary: '#10b981',
+                        accent: '#8b5cf6',
+                        dark: '#0f172a',
+                        'dark-light': '#1e293b',
+                        'chart-1': '#3b82f6',
+                        'chart-2': '#10b981',
+                        'chart-3': '#f59e0b',
+                        'chart-4': '#ef4444'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif']
+                    }
+                }
+            }
+        };
+    </script>
+
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .bg-grid {
+                background-image: linear-gradient(rgba(14, 165, 233, 0.1) 1px, transparent 1px),
+                                  linear-gradient(90deg, rgba(14, 165, 233, 0.1) 1px, transparent 1px);
+                background-size: 20px 20px;
+            }
+            .text-shadow {
+                text-shadow: 0 0 10px rgba(14, 165, 233, 0.8);
+            }
+            .glow {
+                box-shadow: 0 0 15px rgba(14, 165, 233, 0.5);
+            }
+            .card-hover {
+                transition: all 0.3s ease;
+            }
+            .card-hover:hover {
+                transform: translateY(-5px);
+                box-shadow: 0 10px 25px -5px rgba(14, 165, 233, 0.3);
+            }
+            .animate-pulse-slow {
+                animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+            }
+        }
+    </style>
+</head>
+<body class="bg-dark text-white min-h-screen overflow-x-hidden bg-grid">
+    <!-- 顶部导航栏 -->
+    <header class="bg-dark-light/80 backdrop-blur-md border-b border-primary/20 sticky top-0 z-50">
+        <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <img src="assets/logo.png" alt="Logo" class="h-8 object-contain">
+                <h1 class="text-xl md:text-2xl font-bold text-white">Ai4Energy监控中心</h1>
+                <i class="fa fa-bolt text-primary text-2xl"></i>
+            </div>
+            <div class="flex items-center gap-6">
+                <div class="flex items-center gap-2">
+                    <i class="fa fa-clock-o text-primary"></i>
+                    <span id="current-time" class="text-sm">2024-01-01 00:00:00</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <i class="fa fa-signal text-green-500 animate-pulse"></i>
+                    <span class="text-sm">MQTT 已连接</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主要内容区域 -->
+    <main class="container mx-auto px-4 py-6">
+        <!-- 概览数字看板 -->
+        <section class="mb-8">
+            <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                <i class="fa fa-dashboard text-primary"></i>
+                实时数据概览
+            </h2>
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                <!-- 关键指标卡片 -->
+                <div class="bg-dark-light rounded-lg p-4 card-hover glow border border-primary/20">
+                    <div class="flex justify-between items-start mb-2">
+                        <h3 class="text-sm text-gray-400">风机1功率 (kW)</h3>
+                        <i class="fa fa-tachometer text-primary"></i>
+                    </div>
+                    <p id="metric-1" class="text-2xl font-bold text-white text-shadow">-</p>
+                    <div class="mt-2 text-xs text-gray-400 flex items-center">
+                        <i class="fa fa-arrow-up text-green-500 mr-1"></i>
+                        <span>2.4% 较昨日</span>
+                    </div>
+                </div>
+                
+                <div class="bg-dark-light rounded-lg p-4 card-hover glow border border-primary/20">
+                    <div class="flex justify-between items-start mb-2">
+                        <h3 class="text-sm text-gray-400">风速 (m/s)</h3>
+                        <i class="fa fa-wind text-primary"></i>
+                    </div>
+                    <p id="metric-2" class="text-2xl font-bold text-white text-shadow">-</p>
+                    <div class="mt-2 text-xs text-gray-400 flex items-center">
+                        <i class="fa fa-arrow-down text-red-500 mr-1"></i>
+                        <span>1.8% 较昨日</span>
+                    </div>
+                </div>
+                
+                <div class="bg-dark-light rounded-lg p-4 card-hover glow border border-primary/20">
+                    <div class="flex justify-between items-start mb-2">
+                        <h3 class="text-sm text-gray-400">发电量 (kWh)</h3>
+                        <i class="fa fa-battery-full text-primary"></i>
+                    </div>
+                    <p id="metric-4" class="text-2xl font-bold text-white text-shadow">-</p>
+                    <div class="mt-2 text-xs text-gray-400 flex items-center">
+                        <i class="fa fa-arrow-up text-green-500 mr-1"></i>
+                        <span>5.7% 较昨日</span>
+                    </div>
+                </div>
+                
+                <div class="bg-dark-light rounded-lg p-4 card-hover glow border border-primary/20">
+                    <div class="flex justify-between items-start mb-2">
+                        <h3 class="text-sm text-gray-400">运行时长 (h)</h3>
+                        <i class="fa fa-clock-o text-primary"></i>
+                    </div>
+                    <p id="metric-6" class="text-2xl font-bold text-white text-shadow">-</p>
+                    <div class="mt-2 text-xs text-gray-400 flex items-center">
+                        <i class="fa fa-minus text-gray-500 mr-1"></i>
+                        <span>持平</span>
+                    </div>
+                </div>
+                
+                <div class="bg-dark-light rounded-lg p-4 card-hover glow border border-primary/20">
+                    <div class="flex justify-between items-start mb-2">
+                        <h3 class="text-sm text-gray-400">温度 (°C)</h3>
+                        <i class="fa fa-thermometer-half text-primary"></i>
+                    </div>
+                    <p id="metric-28" class="text-2xl font-bold text-white text-shadow">-</p>
+                    <div class="mt-2 text-xs text-gray-400 flex items-center">
+                        <i class="fa fa-arrow-up text-red-500 mr-1"></i>
+                        <span>3.2% 较昨日</span>
+                    </div>
+                </div>
+                
+                <div class="bg-dark-light rounded-lg p-4 card-hover glow border border-primary/20">
+                    <div class="flex justify-between items-start mb-2">
+                        <h3 class="text-sm text-gray-400">总效率 (%)</h3>
+                        <i class="fa fa-line-chart text-primary"></i>
+                    </div>
+                    <p id="metric-31" class="text-2xl font-bold text-white text-shadow">-</p>
+                    <div class="mt-2 text-xs text-gray-400 flex items-center">
+                        <i class="fa fa-arrow-up text-green-500 mr-1"></i>
+                        <span>1.9% 较昨日</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 图表和详细数据区域 -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <!-- 左侧：TCP数据趋势图 -->
+            <div class="lg:col-span-2 bg-dark-light rounded-lg p-4 border border-primary/20 glow card-hover">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-semibold flex items-center gap-2">
+                        <i class="fa fa-area-chart text-primary"></i>
+                        TCP数据实时趋势
+                    </h2>
+                    <div class="flex gap-2">
+                        <button class="px-2 py-1 text-xs bg-primary/20 hover:bg-primary/30 rounded transition" id="chart-hour">小时</button>
+                        <button class="px-2 py-1 text-xs bg-primary/20 hover:bg-primary/30 rounded transition" id="chart-day">日</button>
+                        <button class="px-2 py-1 text-xs bg-primary/20 hover:bg-primary/30 rounded transition" id="chart-week">周</button>
+                    </div>
+                </div>
+                <div class="h-[350px]">
+                    <canvas id="tcp-chart"></canvas>
+                </div>
+            </div>
+
+            <!-- 右侧：RTU数据统计 -->
+            <div class="bg-dark-light rounded-lg p-4 border border-primary/20 glow card-hover">
+                <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <i class="fa fa-bar-chart text-primary"></i>
+                    RTU数据统计
+                </h2>
+                <div class="h-[350px]">
+                    <canvas id="rtu-chart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- 详细数据表 -->
+        <section class="mb-8">
+            <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                <i class="fa fa-table text-primary"></i>
+                完整监测数据列表
+            </h2>
+            <div class="bg-dark-light rounded-lg border border-primary/20 overflow-hidden glow">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="bg-primary/10 border-b border-primary/20">
+                                <th class="px-4 py-3 text-left">参数ID</th>
+                                <th class="px-4 py-3 text-left">TCP数据值</th>
+                                <th class="px-4 py-3 text-left">RTU数据值</th>
+                                <th class="px-4 py-3 text-left">参数描述</th>
+                                <th class="px-4 py-3 text-left">状态</th>
+                            </tr>
+                        </thead>
+                        <tbody id="data-table-body">
+                            <!-- 数据行将通过JS动态生成 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- 设备状态监控 -->
+        <section>
+            <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                <i class="fa fa-cogs text-primary"></i>
+                风机设备状态
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <!-- 设备状态卡片 -->
+                <div class="bg-dark-light rounded-lg p-4 border border-primary/20 glow card-hover">
+                    <div class="flex justify-between items-start mb-3">
+                        <h3 class="font-medium">风机组1</h3>
+                        <span class="px-2 py-1 bg-green-500/20 text-green-500 text-xs rounded-full">运行中</span>
+                    </div>
+                    <div class="space-y-2">
+                        <div class="flex justify-between">
+                            <span class="text-gray-400 text-sm">当前功率</span>
+                            <span id="fan1-power" class="font-medium">- kW</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400 text-sm">运行状态</span>
+                            <span class="font-medium text-green-500">正常</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400 text-sm">温度</span>
+                            <span id="fan1-temp" class="font-medium">- °C</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-dark-light rounded-lg p-4 border border-primary/20 glow card-hover">
+                    <div class="flex justify-between items-start mb-3">
+                        <h3 class="font-medium">风机组2</h3>
+                        <span class="px-2 py-1 bg-green-500/20 text-green-500 text-xs rounded-full">运行中</span>
+                    </div>
+                    <div class="space-y-2">
+                        <div class="flex justify-between">
+                            <span class="text-gray-400 text-sm">当前功率</span>
+                            <span id="fan2-power" class="font-medium">- kW</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400 text-sm">运行状态</span>
+                            <span class="font-medium text-green-500">正常</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400 text-sm">风速</span>
+                            <span id="fan2-wind" class="font-medium">- m/s</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-dark-light rounded-lg p-4 border border-primary/20 glow card-hover">
+                    <div class="flex justify-between items-start mb-3">
+                        <h3 class="font-medium">变压器</h3>
+                        <span class="px-2 py-1 bg-yellow-500/20 text-yellow-500 text-xs rounded-full">预警</span>
+                    </div>
+                    <div class="space-y-2">
+                        <div class="flex justify-between">
+                            <span class="text-gray-400 text-sm">负载率</span>
+                            <span id="transformer-load" class="font-medium">-%</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400 text-sm">温度</span>
+                            <span class="font-medium text-yellow-500">- °C</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400 text-sm">电压</span>
+                            <span id="transformer-voltage" class="font-medium">- V</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-dark-light rounded-lg p-4 border border-primary/20 glow card-hover">
+                    <div class="flex justify-between items-start mb-3">
+                        <h3 class="font-medium">电网连接</h3>
+                        <span class="px-2 py-1 bg-green-500/20 text-green-500 text-xs rounded-full">正常</span>
+                    </div>
+                    <div class="space-y-2">
+                        <div class="flex justify-between">
+                            <span class="text-gray-400 text-sm">输出功率</span>
+                            <span id="grid-power" class="font-medium">- kW</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400 text-sm">频率</span>
+                            <span id="grid-frequency" class="font-medium">- Hz</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400 text-sm">功率因数</span>
+                            <span id="grid-factor" class="font-medium">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="bg-dark-light/80 border-t border-primary/20 mt-8 py-4">
+        <div class="container mx-auto px-4 text-center text-gray-400 text-sm">
+            <p>© 2024 智能风电监控系统 | 数据更新时间: <span id="update-time">-</span></p>
+        </div>
+    </footer>
+
+    <script>
+        // 全局数据存储
+        let tcpData = {};
+        let rtuData = {};
+
+        // 参数描述映射
+        const paramDescriptions = {
+            '1': '风机功率',
+            '2': '风速',
+            '3': '风向',
+            '4': '发电量',
+            '5': '故障码',
+            '6': '运行时长',
+            '7': '电压',
+            '8': '电流',
+            '9': '有功功率',
+            '10': '无功功率',
+            '11': '视在功率',
+            '12': '电网频率',
+            '13': '齿轮箱温度',
+            '14': '发电机温度',
+            '15': '环境温度',
+            '16': '机舱温度',
+            '17': '叶片角度',
+            '18': '转速',
+            '19': '振动值',
+            '20': '油压',
+            '21': '液压压力',
+            '22': '偏航角度',
+            '23': '刹车状态',
+            '24': '变桨角度',
+            '25': '电网电压',
+            '26': '电网电流',
+            '27': '功率因数',
+            '28': '变压器温度',
+            '29': '冷却系统状态',
+            '30': '润滑系统状态',
+            '31': '综合效率',
+            '32': '电网频率',
+            '33': '接地电阻',
+            '34': '绝缘电阻',
+            '35': '防雷状态'
+        };
+
+        // 更新时间显示
+        function updateTime() {
+            const now = new Date();
+            const timeStr = now.toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            }).replace(/\//g, '-');
+            document.getElementById('current-time').textContent = timeStr;
+            document.getElementById('update-time').textContent = timeStr;
+        }
+
+        // 初始化时间并定时更新
+        updateTime();
+        setInterval(updateTime, 3000);
+
+        // 更新数字看板
+        function updateMetrics() {
+            document.getElementById('metric-1').textContent = tcpData['1'] || '-';
+            document.getElementById('metric-2').textContent = tcpData['2'] || '-';
+            document.getElementById('metric-4').textContent = tcpData['4'] || '-';
+            document.getElementById('metric-6').textContent = tcpData['6'] || '-';
+            document.getElementById('metric-28').textContent = tcpData['28'] || '-';
+            document.getElementById('metric-31').textContent = tcpData['31'] || '-';
+
+            // 更新设备状态
+            document.getElementById('fan1-power').textContent = `${tcpData['1'] || '-'} kW`;
+            document.getElementById('fan1-temp').textContent = `${tcpData['28'] || '-'} °C`;
+            document.getElementById('fan2-power').textContent = `${rtuData['1'] || '-'} kW`;
+            document.getElementById('fan2-wind').textContent = `${tcpData['2'] || '-'} m/s`;
+            document.getElementById('transformer-load').textContent = `${(tcpData['4'] / rtuData['1'] * 100).toFixed(1) || '-'}%`;
+            document.getElementById('transformer-voltage').textContent = `${tcpData['7'] || '-'} V`;
+            document.getElementById('grid-power').textContent = `${tcpData['4'] || '-'} kW`;
+            document.getElementById('grid-frequency').textContent = `${(tcpData['12'] / 491.194).toFixed(2) || '-'} Hz`;
+            document.getElementById('grid-factor').textContent = `${(tcpData['27'] / 5063.11).toFixed(2) || '-'}`;
+        }
+
+        // 生成数据表格
+        function generateDataTable() {
+            const tbody = document.getElementById('data-table-body');
+            tbody.innerHTML = '';
+
+            // 生成前20行数据
+            for (let i = 1; i <= 20; i++) {
+                const row = document.createElement('tr');
+                row.className = 'border-b border-primary/10 hover:bg-primary/5 transition';
+
+                // 状态判断
+                let status = '正常';
+                let statusClass = 'text-green-500';
+                if (i === 28) {
+                    if (tcpData[i] > 90) {
+                        status = '高温预警';
+                        statusClass = 'text-yellow-500';
+                    }
+                } else if (i === 5 && tcpData[i] > 0) {
+                    status = '故障';
+                    statusClass = 'text-red-500';
+                }
+
+                row.innerHTML = `
+                    <td class="px-4 py-3">${i}</td>
+                    <td class="px-4 py-3">${tcpData[i] || '-'}</td>
+                    <td class="px-4 py-3">${rtuData[i] || '-'}</td>
+                    <td class="px-4 py-3">${paramDescriptions[i] || '未定义参数'}</td>
+                    <td class="px-4 py-3"><span class="${statusClass}">${status}</span></td>
+                `;
+
+                tbody.appendChild(row);
+            }
+        }
+
+        // 初始化TCP数据图表
+        function initTCPChart() {
+            const ctx = document.getElementById('tcp-chart').getContext('2d');
+
+            const labels = Array.from({ length: 12 }, (_, i) => `${i + 1}号参数`);
+            const dataValues = labels.map((_, i) => tcpData[(i + 1).toString()] || 0);
+
+            const gradient = ctx.createLinearGradient(0, 0, 0, 350);
+            gradient.addColorStop(0, 'rgba(14, 165, 233, 0.4)');
+            gradient.addColorStop(1, 'rgba(14, 165, 233, 0)');
+
+            window.tcpChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'TCP实时数据',
+                        data: dataValues,
+                        borderColor: '#0ea5e9',
+                        backgroundColor: gradient,
+                        tension: 0.4,
+                        fill: true,
+                        pointBackgroundColor: '#ffffff',
+                        pointBorderColor: '#0ea5e9',
+                        pointRadius: 4,
+                        pointHoverRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                            borderColor: 'rgba(14, 165, 233, 0.5)',
+                            borderWidth: 1,
+                            padding: 10,
+                            titleColor: '#ffffff',
+                            bodyColor: '#ffffff',
+                            displayColors: false
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                color: 'rgba(14, 165, 233, 0.1)'
+                            },
+                            ticks: {
+                                color: '#94a3b8'
+                            }
+                        },
+                        y: {
+                            grid: {
+                                color: 'rgba(14, 165, 233, 0.1)'
+                            },
+                            ticks: {
+                                color: '#94a3b8'
+                            },
+                            beginAtZero: true
+                        }
+                    },
+                    animation: {
+                        duration: 3000,
+                        easing: 'easeOutQuart'
+                    }
+                }
+            });
+        }
+
+        // 初始化RTU数据图表
+        function initRTUChart() {
+            const ctx = document.getElementById('rtu-chart').getContext('2d');
+
+            const labels = ['1-5', '6-10', '11-15', '16-20', '21-25', '26-30', '31-35'];
+            const dataValues = [
+                Object.values(rtuData).slice(0, 5).reduce((a, b) => a + b, 0) / 5,
+                Object.values(rtuData).slice(5, 10).reduce((a, b) => a + b, 0) / 5,
+                Object.values(rtuData).slice(10, 15).reduce((a, b) => a + b, 0) / 5,
+                Object.values(rtuData).slice(15, 20).reduce((a, b) => a + b, 0) / 5,
+                Object.values(rtuData).slice(20, 25).reduce((a, b) => a + b, 0) / 5,
+                Object.values(rtuData).slice(25, 30).reduce((a, b) => a + b, 0) / 5,
+                Object.values(rtuData).slice(30, 35).reduce((a, b) => a + b, 0) / 5
+            ];
+
+            const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
+
+            window.rtuChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'RTU数据平均值',
+                        data: dataValues,
+                        backgroundColor: colors.map(color => `${color}80`),
+                        borderColor: colors,
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                            borderColor: 'rgba(14, 165, 233, 0.5)',
+                            borderWidth: 1,
+                            padding: 10
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                color: '#94a3b8'
+                            }
+                        },
+                        y: {
+                            grid: {
+                                color: 'rgba(14, 165, 233, 0.1)'
+                            },
+                            ticks: {
+                                color: '#94a3b8'
+                            },
+                            beginAtZero: true
+                        }
+                    },
+                    animation: {
+                        duration: 3000,
+                        easing: 'easeOutQuart'
+                    }
+                }
+            });
+        }
+
+        // 更新图表数据
+        function updateCharts() {
+            if (window.tcpChartInstance) {
+                window.tcpChartInstance.data.datasets[0].data = Array.from({ length: 12 }, (_, i) => tcpData[(i + 1).toString()] || 0);
+                window.tcpChartInstance.update();
+            }
+
+            if (window.rtuChartInstance) {
+                const rtuAvgData = [
+                    Object.values(rtuData).slice(0, 5).reduce((a, b) => a + b, 0) / 5,
+                    Object.values(rtuData).slice(5, 10).reduce((a, b) => a + b, 0) / 5,
+                    Object.values(rtuData).slice(10, 15).reduce((a, b) => a + b, 0) / 5,
+                    Object.values(rtuData).slice(15, 20).reduce((a, b) => a + b, 0) / 5,
+                    Object.values(rtuData).slice(20, 25).reduce((a, b) => a + b, 0) / 5,
+                    Object.values(rtuData).slice(25, 30).reduce((a, b) => a + b, 0) / 5,
+                    Object.values(rtuData).slice(30, 35).reduce((a, b) => a + b, 0) / 5
+                ];
+                window.rtuChartInstance.data.datasets[0].data = rtuAvgData;
+                window.rtuChartInstance.update();
+            }
+        }
+
+        // 初始化MQTT连接
+        function initMQTT() {
+            const client = mqtt.connect('ws://192.168.3.14:8083/mqtt');
+
+            client.on('connect', () => {
+                console.log('MQTT 连接成功');
+                client.subscribe('ai4energy/tcpData');
+                client.subscribe('ai4energy/rtuData');
+            });
+
+            client.on('message', (topic, message) => {
+                try {
+                    const data = JSON.parse(message.toString());
+                    if (topic === 'ai4energy/tcpData') {
+                        tcpData = data;
+                    } else if (topic === 'ai4energy/rtuData') {
+                        rtuData = data;
+                    }
+                    updateMetrics();
+                    generateDataTable();
+                    updateCharts(); // 更新图表
+                } catch (e) {
+                    console.error('解析MQTT消息失败:', e);
+                }
+            });
+
+            client.on('error', (err) => {
+                console.error('MQTT连接错误:', err);
+            });
+        }
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            initMQTT();
+            updateMetrics();
+            generateDataTable();
+            initTCPChart();
+            initRTUChart();
+
+            // 图表时间范围切换按钮
+            document.getElementById('chart-hour').addEventListener('click', function () {
+                this.classList.add('bg-primary/50');
+                document.getElementById('chart-day').classList.remove('bg-primary/50');
+                document.getElementById('chart-week').classList.remove('bg-primary/50');
+            });
+
+            document.getElementById('chart-day').addEventListener('click', function () {
+                this.classList.add('bg-primary/50');
+                document.getElementById('chart-hour').classList.remove('bg-primary/50');
+                document.getElementById('chart-week').classList.remove('bg-primary/50');
+            });
+
+            document.getElementById('chart-week').addEventListener('click', function () {
+                this.classList.add('bg-primary/50');
+                document.getElementById('chart-hour').classList.remove('bg-primary/50');
+                document.getElementById('chart-day').classList.remove('bg-primary/50');
+            });
+        });
+    </script>
+</body>
+</html>
