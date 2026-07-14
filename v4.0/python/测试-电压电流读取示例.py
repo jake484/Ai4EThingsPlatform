@@ -1,7 +1,8 @@
 from pymodbus.client import ModbusTcpClient
 
 # ===================== 配置项 =====================
-MODULE_IP = "192.168.3.13"  # 你的模块IP
+# 通过直接访问 LOAR-EHT模块-B 模块，读取数据采集器modbus数据
+MODULE_IP = "192.168.3.13"  # LOAR-EHT模块-B地址
 MODULE_PORT = 502  # 模块转发端口
 SLAVE_ID = 1  # 从站地址
 START_ADDR = 0  # 起始地址 00 00

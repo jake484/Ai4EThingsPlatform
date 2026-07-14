@@ -22,7 +22,8 @@ src_client.connect()
 dst_client = ModbusTcpClient(host=DST_MODBUS_HOST, port=DST_MODBUS_PORT)
 dst_client.connect()
 
-SLAVE_ID = 1
+SLAVE_ID = 1  # 源设备 1：模拟量（电压、电流、PWM）
+SLAVE_ID_SRC_DI = 2  # 源设备 2：开关量（DI1、DI2）
 ESP8266_IP = "192.168.3.15"  # 改成你的8266 IP
 
 # ThingsBoard MQTT 配置
@@ -38,8 +39,8 @@ REG_VOLTAGE = 0  # 电压 (Float, 2 regs)
 REG_CURRENT = 2  # 电流 (Float, 2 regs)
 REG_POWER = 4  # 功率 (Float, 2 regs)
 REG_PWM = 6  # PWM 设定值 (Float, 2 regs)
-REG_SWITCH_1 = 8  # 开关量 1 (Int, 1 reg, 0 or 1)
-REG_SWITCH_2 = 9  # 开关量 2 (Int, 1 reg, 0 or 1)
+COIL_SWITCH_1 = 0  # 开关量 1 (Coil, 0 or 1)
+COIL_SWITCH_2 = 1  # 开关量 2 (Coil, 0 or 1)
 
 # 全局变量
 voltage = 0.0
@@ -111,12 +112,37 @@ def read_int(client: ModbusTcpClient, addr):
         return 0
 
 
+def read_discrete_bits(
+    client: ModbusTcpClient, addr, count=1, device_id=SLAVE_ID_SRC_DI
+):
+    """读取离散输入（开关量/数字量），功能码 0x02"""
+    try:
+        result = client.read_discrete_inputs(
+            address=addr, count=count, device_id=device_id
+        )
+        if result.isError():
+            return [0] * count
+        else:
+            return result.bits[:count]
+    except Exception as e:
+        print(f"读离散输入异常: {e}")
+        return [0] * count
+
+
 def write_int(client: ModbusTcpClient, addr, value):
     """写入单个寄存器作为整数"""
     try:
         client.write_registers(address=addr, values=[int(value)], device_id=SLAVE_ID)
     except Exception as e:
         print(f"写整数异常: {e}")
+
+
+def write_coil(client: ModbusTcpClient, addr, value):
+    """写入线圈（功能码 0x05）"""
+    try:
+        client.write_coil(address=addr, value=bool(value), device_id=SLAVE_ID)
+    except Exception as e:
+        print(f"写线圈异常: {e}")
 
 
 # ===================== 线程 1：采集 + PWM控制 =====================
@@ -148,9 +174,10 @@ def thread_collect_and_control():
             current = c_raw / 10000.0
             power = voltage * current
 
-            # 2. 从源读取开关量
-            s1 = read_int(src_client, REG_SWITCH_1)
-            s2 = read_int(src_client, REG_SWITCH_2)
+            # 2. 从源读取开关量（功能码 0x02，离散输入 DI1~DI2）
+            bits = read_discrete_bits(src_client, 0, 2)  # 起始地址0，读取2路
+            s1 = 1 if bits[0] else 0
+            s2 = 1 if bits[1] else 0
 
             # 更新全局变量供 MQTT 使用
             switch_1 = s1
@@ -160,8 +187,8 @@ def thread_collect_and_control():
             write_float(dst_client, REG_VOLTAGE, voltage)
             write_float(dst_client, REG_CURRENT, current)
             write_float(dst_client, REG_POWER, power)
-            write_int(dst_client, REG_SWITCH_1, s1)
-            write_int(dst_client, REG_SWITCH_2, s2)
+            write_coil(dst_client, COIL_SWITCH_1, s1)
+            write_coil(dst_client, COIL_SWITCH_2, s2)
 
             # --- 部分 B: PWM 监控与下发 (127.0.0.1 -> ESP8266) ---
 
@@ -280,7 +307,7 @@ def thread_mqtt_unified():
                 "pwm": pwm,
                 "switch_1": bool(switch_1),
                 "switch_2": bool(switch_2),
-                "running": True,
+                "running": bool(switch_1) and bool(switch_2),
             }
             # 发布遥测数据
             client.publish(TB_TOPIC_TELEMETRY, json.dumps(payload))
