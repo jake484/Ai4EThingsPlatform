@@ -2,8 +2,8 @@
 #include <ESP8266WebServer.h>
 
 // WiFi配置
-const char* ssid     = "jake484";
-const char* password = "yjy522432938";
+const char* ssid     = "Ai4Energy";
+const char* password = "12345678";
 
 // ==================== 静态IP（无DNS版）====================
 IPAddress localIP(192, 168, 3, 15);     // 你自己固定的IP

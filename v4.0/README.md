@@ -31,11 +31,16 @@
 
 ## 1 物联网平台
 
-物联网平台采用Thingboard，部署在阿里云上。公网IP地址为：47.106.20.36。
+物联网平台采用Thingboard，部署在阿里云上。公网IP地址为：47.106.20.36:8080，登录账号与密码为：tenant@thingsboard.org/默认密码。
 
 ## 2 工控机
 
 用户与密码：ai4energy/ai4energy，可以就地通过显示器使用本机，或者可以通过ssh进行远程访问。
+* 在工控机中通过systemd配置了gateway.py开机自启动与diagslave的开机自启动，分别见相应服务的配置文件。
+```bash
+cat /etc/systemd/system/diagslave.service
+cat /etc/systemd/system/gateway.service
+```
 
 ### 2.1 Ubuntu 24.04 安装
 
@@ -55,12 +60,14 @@ diagslave是一个程序，用于模拟PLC。它基于libmodbus，这是官方�
 
 #### 2.3.1 配置方法
 
-1. 在`/home/ai4energy/gateway/`中放置了`Gateway.py`文件，并建立了虚拟环境：
+1. 在`/home/admind/gateway/`中放置了`Gateway.py`文件，并建立了虚拟环境：
 ```bash
-python3 -m venv ai4energy
 # 激活虚拟环境
-source /home/ai4energy/gateway/ai4energy/bin/activate
+source /home/admind/gateway/bin/activate
+# 创建虚拟环境的方式为：python3 -m venv gateway
+# 激活虚拟环境的方式为：source /home/admind/gateway/bin/activate
 ```
+
 
 2. 激活虚拟环境后，即可运行`Gateway.py`。
 
@@ -78,15 +85,15 @@ source /home/ai4energy/gateway/ai4energy/bin/activate
 
 ## 3 交换机
 
-本质上是一个可连4G网的路由器。
+本质上是一个可连4G网的路由器，型号为塔石的物联网4G路由器，插卡即可连接公网。
 
 ## 4 HMI
 
-可以手动输入PWM信号，并实时展示开关状态，电流、电压、功率数值。它的数值池为工控机本机的diagslave。
+可以手动输入PWM信号，并实时展示开关状态，电流、电压、功率数值。它的数值池为工控机本机的diagslave。HMI的文件见[HMI](v4.0\hmi\鼓风机.hmi)。
 
 ## 5 Arduino与ESP8266模块
 
-由于本项目选择的Arduino（Uno R3）没有无线通讯手段，为了更好体现模块化，使得终端箱和工控箱完全隔离开来，采用ESP8266无线模块接受上位工控机指令，接收来自上位机的PWM信号，并转发给Arduino，实现电机调速。
+由于本项目选择的Arduino（Uno R3）没有无线通讯手段，为了更好体现模块化，使得终端箱和工控箱完全隔离开来，采用ESP8266无线模块接受上位工控机指令，接收来自上位机的PWM信号，并转发给Arduino，实现电机调速。两模块都可通过arduino IDE进行编程、下载，源码见[Arduino模块](vv4.0\arduino\arduino_motor\arduino_motor.ino)与[ESP8266模块](v4.0\arduino\esp8266-wifi\esp8266-wifi.ino)。
 
 ## 6 控制模块
 
@@ -109,6 +116,6 @@ pymodbus的函数本质上是对Modbus TCP协议进行封装，因此不需要�
 
 该模块的本质为无线传输模块，工控机连接LOAR-EHT模块-B，对于工控机来说，LOAR-EHT模块-B是一个TCP Server，工控机作为TCP Client去访问LOAR-EHT模块-B。
 
-随后，LOAR-EHT模块-B会把消息原封不动的进行转发，通过LORA无线传输方式转发给LOAR-EHT模块-A，随后，LOAR-EHT模块-A作为TCP Client，去访问作为TCP Server的ETH-MODBUS-IO8R-A模块，该模块提供了Modbus TCP服务，提供了接口去读取功率采集器的数据。
+随后，LOAR-EHT模块-B会把消息原封不动的进行转发，通过LORA无线传输方式转发给LOAR-EHT模块-A（这两模块本来就是配好的），随后，LOAR-EHT模块-A作为TCP Client，去访问作为TCP Server的ETH-MODBUS-IO8R-A模块，该模块提供了Modbus TCP服务，提供了接口去读取功率采集器的数据。
 
-因此，只需要配置作为TCP Client的LOAR-EHT模块-A需要去访问的IP地址（即ETH-MODBUS-IO8R-A模块的地址），即可实现整个链路的通讯。工控机需要按照Modbus TCP访问的方式去直接访问LOAR-EHT模块-B，即可间接的完成对ETH-MODBUS-IO8R-A的访问。
+因此，只需要配置作为TCP Client的LOAR-EHT模块-A需要去访问的IP地址（即ETH-MODBUS-IO8R-A模块的地址），即可实现整个链路的通讯。工控机需要按照Modbus TCP访问的方式去直接访问LOAR-EHT模块-B，即可间接的完成对ETH-MODBUS-IO8R-A的访问，各自文档在[文档](v4.0\plc)中，可根据实际配置进行琢磨。

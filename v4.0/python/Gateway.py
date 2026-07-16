@@ -2,8 +2,26 @@ import threading
 import time
 import requests
 import json
+import logging
+from logging.handlers import RotatingFileHandler
 from pymodbus.client import ModbusTcpClient
 from paho.mqtt import client as mqtt_client
+
+# ===================== 日志配置 =====================
+LOG_FILE = "gateway.log"
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        RotatingFileHandler(
+            LOG_FILE, encoding="utf-8", maxBytes=5 * 1024 * 1024, backupCount=3
+        ),
+        logging.StreamHandler(),
+    ],
+)
+logger = logging.getLogger(__name__)
+
 
 # ===================== 配置 =====================
 # 1. 真实硬件模块 (数据源 - Master 读取它)
@@ -14,13 +32,31 @@ SRC_MODBUS_PORT = 502
 DST_MODBUS_HOST = "127.0.0.1"
 DST_MODBUS_PORT = 502
 
-# 1. 连接数据源 (192.168.3.13)
+# 1. 连接数据源 (192.168.3.13) — 失败则重试
 src_client = ModbusTcpClient(host=SRC_MODBUS_HOST, port=SRC_MODBUS_PORT)
-src_client.connect()
+while True:
+    try:
+        src_client.connect()
+        if src_client.connected:
+            logger.info(f"✅ 数据源连接成功: {SRC_MODBUS_HOST}:{SRC_MODBUS_PORT}")
+            break
+        raise ConnectionError("connect() 返回未连接状态")
+    except Exception as e:
+        logger.warning(f"⚠️ 数据源连接失败 ({e})，3秒后重试...")
+        time.sleep(3)
 
-# 2. 连接本地数据池 (127.0.0.1)
+# 2. 连接本地数据池 (127.0.0.1) — 失败则重试
 dst_client = ModbusTcpClient(host=DST_MODBUS_HOST, port=DST_MODBUS_PORT)
-dst_client.connect()
+while True:
+    try:
+        dst_client.connect()
+        if dst_client.connected:
+            logger.info(f"✅ 数据池连接成功: {DST_MODBUS_HOST}:{DST_MODBUS_PORT}")
+            break
+        raise ConnectionError("connect() 返回未连接状态")
+    except Exception as e:
+        logger.warning(f"⚠️ 数据池连接失败 ({e})，3秒后重试...")
+        time.sleep(3)
 
 SLAVE_ID = 1  # 源设备 1：模拟量（电压、电流、PWM）
 SLAVE_ID_SRC_DI = 2  # 源设备 2：开关量（DI1、DI2）
@@ -76,7 +112,7 @@ def read_data_from_modbus(
             )
             return value
     except Exception as e:
-        print(f"读浮点数异常: {e}")
+        logger.error(f"读浮点数异常: {e}")
         return 0.0
 
 
@@ -94,7 +130,7 @@ def write_float(client: ModbusTcpClient, addr, value, word_order="little"):
         )
         client.write_registers(address=addr, values=regs, device_id=SLAVE_ID)
     except Exception as e:
-        print(f"写浮点数异常: {e}")
+        logger.error(f"写浮点数异常: {e}")
 
 
 def read_int(client: ModbusTcpClient, addr):
@@ -108,7 +144,7 @@ def read_int(client: ModbusTcpClient, addr):
         else:
             return result.registers[0]
     except Exception as e:
-        print(f"读整数异常: {e}")
+        logger.error(f"读整数异常: {e}")
         return 0
 
 
@@ -125,7 +161,7 @@ def read_discrete_bits(
         else:
             return result.bits[:count]
     except Exception as e:
-        print(f"读离散输入异常: {e}")
+        logger.error(f"读离散输入异常: {e}")
         return [0] * count
 
 
@@ -134,7 +170,7 @@ def write_int(client: ModbusTcpClient, addr, value):
     try:
         client.write_registers(address=addr, values=[int(value)], device_id=SLAVE_ID)
     except Exception as e:
-        print(f"写整数异常: {e}")
+        logger.error(f"写整数异常: {e}")
 
 
 def write_coil(client: ModbusTcpClient, addr, value):
@@ -142,7 +178,7 @@ def write_coil(client: ModbusTcpClient, addr, value):
     try:
         client.write_coil(address=addr, value=bool(value), device_id=SLAVE_ID)
     except Exception as e:
-        print(f"写线圈异常: {e}")
+        logger.error(f"写线圈异常: {e}")
 
 
 # ===================== 线程 1：采集 + PWM控制 =====================
@@ -150,12 +186,12 @@ def thread_collect_and_control():
     global voltage, current, power, switch_1, switch_2, pwm, dst_client, src_client
 
     # 【初始化】确保本地 PWM 寄存器有默认值 255，避免首次读取为 0
-    print("⚙️ 初始化本地 PWM 寄存器为 255...")
+    logger.info("⚙️ 初始化本地 PWM 寄存器为 255...")
     write_float(dst_client, REG_PWM, 255.0)
 
     last_pwm_val = -1.0  # 记录上一次的 PWM 值，用于检测变化
 
-    print("✅ 采集与控制合并线程启动")
+    logger.info("✅ 采集与控制合并线程启动")
 
     while True:
         try:
@@ -201,38 +237,42 @@ def thread_collect_and_control():
 
             # 3. 检测数值是否发生变化
             if final_pwm != last_pwm_val:
-                print(f"📢 检测到 PWM 变化: {last_pwm_val} -> {final_pwm}")
+                logger.info(f"📢 检测到 PWM 变化: {last_pwm_val} -> {final_pwm}")
 
                 # 4. 下发给 ESP8266
                 try:
                     url = f"http://{ESP8266_IP}/pwm?value={int(final_pwm)}"
                     requests.get(url, timeout=5)
-                    print(f"✅ ESP8266 下发成功: {int(final_pwm)}")
+                    logger.info(f"✅ ESP8266 下发成功: {int(final_pwm)}")
 
                     # 更新全局变量和最后一次记录的值
                     pwm = final_pwm
                     last_pwm_val = final_pwm
 
                 except Exception as e:
-                    print(f"❌ ESP8266 下发失败: {e}")
+                    logger.error(f"❌ ESP8266 下发失败: {e}")
             else:
                 # 值未变化，更新全局变量以保持最新状态
                 pwm = final_pwm
 
         except Exception as e:
-            print(f"❌ 合并线程执行错误: {e}")
-            # 尝试重连
-            try:
-                src_client.close()
-                dst_client.close()
-                time.sleep(2)
-                src_client.connect()
-                dst_client.connect()
-                # 重连后重新初始化 PWM 默认值以防万一
-                write_float(dst_client, REG_PWM, 255.0)
-                last_pwm_val = -1.0
-            except Exception as reconnect_err:
-                print(f"❌ 重连失败: {reconnect_err}")
+            logger.error(f"❌ 合并线程执行错误: {e}")
+            # 尝试重连两个 Modbus 连接
+            for client_obj, name in [(src_client, "数据源"), (dst_client, "数据池")]:
+                for retry in range(5):
+                    try:
+                        client_obj.close()
+                        time.sleep(1)
+                        client_obj.connect()
+                        if client_obj.connected:
+                            logger.info(f"✅ {name} 重连成功")
+                            break
+                    except Exception as re:
+                        logger.warning(f"⚠️ {name} 第{retry+1}次重连失败: {re}")
+                    time.sleep(2)
+            # 重连后重新初始化 PWM 默认值以防万一
+            write_float(dst_client, REG_PWM, 255.0)
+            last_pwm_val = -1.0
 
         time.sleep(1)  # 统一轮询频率
 
@@ -244,11 +284,15 @@ def thread_mqtt_unified():
 
     def on_connect(c, u, f, rc, props=None):
         if rc == 0:
-            print("✅ MQTT 统一连接成功")
+            logger.info("✅ MQTT 统一连接成功")
             # 订阅 RPC 请求主题
             c.subscribe(TB_TOPIC_RPC_REQUEST)
         else:
-            print(f"❌ MQTT 连接失败: {rc}")
+            logger.warning(f"❌ MQTT 连接失败 (rc={rc})，后台将自动重连...")
+
+    def on_disconnect(c, p, rc, props=None):
+        if rc != 0:
+            logger.warning(f"⚠️ MQTT 意外断开 (rc={rc})，后台自动重连中...")
 
     def on_message(c, u, msg):
         try:
@@ -269,17 +313,17 @@ def thread_mqtt_unified():
                 # 直接写入本地 Modbus 寄存器
                 # 注意：这里写入后，合并线程会在下一个周期读取并下发
                 write_float(dst_client, REG_PWM, float(val_int))
-                print(f"📩 RPC 收到指令，已写入本地寄存器 PWM: {val_int}")
+                logger.info(f"📩 RPC 收到指令，已写入本地寄存器 PWM: {val_int}")
 
                 response_payload = json.dumps({"result": "success", "pwm": val_int})
                 response_topic = f"v1/devices/me/rpc/response/{request_id}"
                 c.publish(response_topic, response_payload)
 
             else:
-                print(f"⚠️ 未知的 RPC 方法: {method}")
+                logger.warning(f"⚠️ 未知的 RPC 方法: {method}")
 
         except Exception as e:
-            print(f"❌ RPC 处理错误: {e}")
+            logger.error(f"❌ RPC 处理错误: {e}")
 
     # 初始化 MQTT 客户端
     client = mqtt_client.Client(
@@ -287,15 +331,26 @@ def thread_mqtt_unified():
     )
     client.username_pw_set(TB_TOKEN)
     client.on_connect = on_connect
+    client.on_disconnect = on_disconnect
     client.on_message = on_message
 
-    # 连接 MQTT
-    client.connect(TB_HOST, TB_PORT, 60)
+    # 配置自动重连（最小间隔1秒，最大间隔60秒）
+    client.reconnect_delay_set(min_delay=1, max_delay=60)
 
-    # 启动网络循环后台线程，这样我们可以同时在主循环中发布消息
+    # 首次连接：失败则循环重试（适配开机时网络未就绪的场景）
+    while True:
+        try:
+            client.connect(TB_HOST, TB_PORT, 60)
+            logger.info("✅ MQTT 首次连接请求已发送")
+            break
+        except Exception as e:
+            logger.warning(f"⚠️ MQTT 首次连接失败 ({e})，5秒后重试...")
+            time.sleep(5)
+
+    # 启动网络循环后台线程
     client.loop_start()
 
-    print("✅ 统一 MQTT 线程启动 (遥测+RPC)")
+    logger.info("✅ 统一 MQTT 线程启动 (遥测+RPC)")
 
     try:
         while True:
@@ -315,7 +370,7 @@ def thread_mqtt_unified():
             # 等待下一次上报
             time.sleep(2)
     except Exception as e:
-        print(f"❌ MQTT 统一线程异常: {e}")
+        logger.error(f"❌ MQTT 统一线程异常: {e}")
     finally:
         client.loop_stop()
         client.disconnect()
@@ -324,10 +379,10 @@ def thread_mqtt_unified():
 
 # ===================== 启动 =====================
 if __name__ == "__main__":
-    print("🚀 智能网关启动 (优化版: 2线程)")
-    print(f"📡 数据源: {SRC_MODBUS_HOST}:{SRC_MODBUS_PORT}")
-    print(f"💾 数据池: {DST_MODBUS_HOST}:{DST_MODBUS_PORT}")
-    print(f"💡 执行器: {ESP8266_IP}")
+    logger.info("🚀 智能网关启动 (优化版: 2线程)")
+    logger.info(f"📡 数据源: {SRC_MODBUS_HOST}:{SRC_MODBUS_PORT}")
+    logger.info(f"💾 数据池: {DST_MODBUS_HOST}:{DST_MODBUS_PORT}")
+    logger.info(f"💡 执行器: {ESP8266_IP}")
 
     # 启动合并后的采集与控制线程
     t1 = threading.Thread(target=thread_collect_and_control, daemon=True)
@@ -342,4 +397,4 @@ if __name__ == "__main__":
         while True:
             time.sleep(10)
     except KeyboardInterrupt:
-        print("🛑 程序退出")
+        logger.info("🛑 程序退出")
